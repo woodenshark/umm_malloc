@@ -8,45 +8,32 @@
 /*
  * There are a number of defines you can set at compile time that affect how
  * the memory allocator will operate.
- * You can set them in your config file umm_malloc_cfg.h.
- * In GNU C, you also can set these compile time defines like this:
  *
- * -D UMM_TEST_MAIN
- *
- * Set this if you want to compile in the test suite at the end of this file.
- *
- * If you leave this define unset, then you might want to set another one:
- *
- * -D UMM_REDEFINE_MEM_FUNCTIONS
- *
- * If you leave this define unset, then the function names are left alone as
- * umm_malloc() umm_free() and umm_realloc() so that they cannot be confused
- * with the C runtime functions malloc() free() and realloc()
- *
- * If you do set this define, then the function names become malloc()
- * free() and realloc() so that they can be used as the C runtime functions
- * in an embedded environment.
- *
- * -D UMM_BEST_FIT (defualt)
+ * You can set them in umm_malloc_cfg.h. In GNU C, you also can set these
+ * compile time defines like this:
  *
  * Set this if you want to use a best-fit algorithm for allocating new
  * blocks
  *
- * -D UMM_FIRST_FIT
+ * -D UMM_BEST_FIT (defualt)
  *
  * Set this if you want to use a first-fit algorithm for allocating new
  * blocks
  *
- * -D UMM_DBG_LOG_LEVEL=n
+ * -D UMM_FIRST_FIT
  *
  * Set n to a value from 0 to 6 depending on how verbose you want the debug
  * log to be
  *
+ * -D UMM_DBG_LOG_LEVEL=n
+ *
  * ----------------------------------------------------------------------------
  *
- * Support for this library in a multitasking environment is provided when
- * you add bodies to the UMM_CRITICAL_ENTRY and UMM_CRITICAL_EXIT macros
- * (see below)
+ * To use this library in a multitasking environment you MUST provide bodies
+ * to the UMM_CRITICAL_ENTRY and UMM_CRITICAL_EXIT macros (see below)
+ *
+ * Without protection against multiple threads accessing the allocation
+ * heap at the same time, you WILL end up with a corrupted heap!
  *
  * ----------------------------------------------------------------------------
  */
@@ -54,47 +41,47 @@
 extern char test_umm_heap[];
 
 /* Start addresses and the size of the heap */
-#define UMM_MALLOC_CFG_HEAP_ADDR (test_umm_heap)
-#define UMM_MALLOC_CFG_HEAP_SIZE 0x10000
+#ifndef UMM_MALLOC_CFG_HEAP_ADDR
+#  define UMM_MALLOC_CFG_HEAP_ADDR (test_umm_heap)
+#endif
+
+#ifndef UMM_MALLOC_CFG_HEAP_SIZE
+#  define UMM_MALLOC_CFG_HEAP_SIZE 0x10000
+#endif
 
 /* A couple of macros to make packing structures less compiler dependent */
 
-#define UMM_H_ATTPACKPRE
-#define UMM_H_ATTPACKSUF __attribute__((__packed__))
-
-#define UMM_BEST_FIT
-#undef  UMM_FIRST_FIT
+#ifdef __GNUC__
+#  define UMM_H_ATTPACKPRE
+#  define UMM_H_ATTPACKSUF __attribute__((__packed__))
+#else
+#  define UMM_H_ATTPACKPRE
+#  define UMM_H_ATTPACKSUF
+#endif
 
 /*
- * -D UMM_INFO :
+ * Define the fit algorithm
  *
- * Enables a dup of the heap contents and a function to return the total
- * heap size that is unallocated - note this is not the same as the largest
- * unallocated block on the heap!
+ * UMM_BEST_FIT  Scans the free list and stops when it finds an exact fit.
+ *               If no exact fit, then it returns the SMALLEST block that
+ *               satisfies the request.
+ *
+ * UMM_FIRST_FIT Returns the first block that will satisfy the request.
+ *
+ * In general, UMM_BEST_FIT will result in less fragmentation while 
+ * UMM_FIRST_FIT will run a bit faster.
+ *
+ * There are many factors that affect fragmentation, so it's best to run
+ * the allocator with UMM_INFO defined at the beginning so that you can
+ * get an idea of the allocation patterns.
+ *
+ * Default: UMM_BEST_FIT
  */
 
-#define UMM_INFO
-
-#ifdef UMM_INFO
-  typedef struct UMM_HEAP_INFO_t {
-    unsigned short int totalEntries;
-    unsigned short int usedEntries;
-    unsigned short int freeEntries;
-
-    unsigned short int totalBlocks;
-    unsigned short int usedBlocks;
-    unsigned short int freeBlocks;
-
-    unsigned short int maxFreeContiguousBlocks;
-  }
-  UMM_HEAP_INFO;
-
-  extern UMM_HEAP_INFO ummHeapInfo;
-
-  void *umm_info( void *ptr, int force );
-  size_t umm_free_heap_size( void );
-
-#else
+#ifndef UMM_BEST_FIT
+#  ifndef UMM_FIRST_FIT
+#    define UMM_BEST_FIT
+#  endif
 #endif
 
 /*
@@ -105,13 +92,31 @@ extern char test_umm_heap[];
  *
  * NOTE WELL that these macros MUST be allowed to nest, because umm_free() is
  * called from within umm_malloc()
+ *
+ * Default: Defined as macros that expand to nothing
  */
 
-#define UMM_CRITICAL_ENTRY()
-#define UMM_CRITICAL_EXIT()
+#ifndef UMM_CRITICAL_ENTRY
+#  define UMM_CRITICAL_ENTRY()
+#endif
+#ifndef UMM_CRITICAL_EXIT
+#  define UMM_CRITICAL_EXIT()
+#endif
 
 /*
- * -D UMM_INTEGRITY_CHECK :
+ * -D UMM_INFO :
+ *
+ * Enables a dup of the heap contents and a function to return the total
+ * heap size that is unallocated - note this is not the same as the largest
+ * unallocated block on the heap!
+ *
+ * Default: Not defined
+ */
+
+#define UMM_INFO
+
+/*
+ * -D UMM_INTEGRITY :
  *
  * Enables heap integrity check before any heap operation. It affects
  * performance, but does NOT consume extra memory.
@@ -122,18 +127,11 @@ extern char test_umm_heap[];
  * Note that not all buffer overruns are detected: each buffer is aligned by
  * 4 bytes, so there might be some trailing "extra" bytes which are not checked
  * for corruption.
+ *
+ * Default: Not defined
  */
 
-#define UMM_INTEGRITY_CHECK
-
-#ifdef UMM_INTEGRITY_CHECK
-   int umm_integrity_check( void );
-#  define INTEGRITY_CHECK() umm_integrity_check()
-   extern void umm_corruption(void);
-#  define UMM_HEAP_CORRUPTION_CB() printf( "Heap Corruption!" )
-#else
-#  define INTEGRITY_CHECK() 0
-#endif
+#define UMM_INTEGRITY
 
 /*
  * -D UMM_POISON :
@@ -161,23 +159,10 @@ extern char test_umm_heap[];
  *
  * If poison corruption is detected, the message is printed and user-provided
  * callback is called: `UMM_HEAP_CORRUPTION_CB()`
+ *
+ * Default: Not defined
  */
 
-#define UMM_POISON_CHECK
-
-#define UMM_POISON_SIZE_BEFORE 4
-#define UMM_POISON_SIZE_AFTER 4
-#define UMM_POISONED_BLOCK_LEN_TYPE short
-
-#ifdef UMM_POISON_CHECK
-   void *umm_poison_malloc( size_t size );
-   void *umm_poison_calloc( size_t num, size_t size );
-   void *umm_poison_realloc( void *ptr, size_t size );
-   void  umm_poison_free( void *ptr );
-   int   umm_poison_check( void );
-#  define POISON_CHECK() umm_poison_check()
-#else
-#  define POISON_CHECK() 0
-#endif
+#define UMM_POISON
 
 #endif /* _UMM_MALLOC_CFG_H */

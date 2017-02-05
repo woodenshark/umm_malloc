@@ -16,7 +16,6 @@ void *umm_calloc( size_t num, size_t size );
 void *umm_realloc( void *ptr, size_t size );
 void  umm_free( void *ptr );
 
-
 /* ------------------------------------------------------------------------ */
 
 #endif /* UMM_MALLOC_H */

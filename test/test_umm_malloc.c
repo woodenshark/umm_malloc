@@ -2,24 +2,88 @@
 #include "stdlib.h"
 #include "string.h"
 
+#include "dbglog/dbglog.h"
 #include "unity_fixture.h"
 
 #include "umm_malloc.h"
 #include "umm_malloc_cfg.h"
 
-/* Use the default DBGLOG_LEVEL and DBGLOG_FUNCTION */
-
-#define DBGLOG_LEVEL 0
-
-#include "dbglog/dbglog.h"
-
 char test_umm_heap[UMM_MALLOC_CFG_HEAP_SIZE];
+
+/* ------------------------------------------------------------------------ 
+ * TODO: extract this to a private h file so that the test code can use it
+ */
+
+UMM_H_ATTPACKPRE typedef struct umm_ptr_t {
+  unsigned short int next;
+  unsigned short int prev;
+} UMM_H_ATTPACKSUF umm_ptr;
+
+
+UMM_H_ATTPACKPRE typedef struct umm_block_t {
+  union {
+    umm_ptr used;
+  } header;
+  union {
+    umm_ptr free;
+    unsigned char data[4];
+  } body;
+} UMM_H_ATTPACKSUF umm_block;
+
+#define UMM_FREELIST_MASK ((unsigned short)0x8000)
+#define UMM_BLOCKNO_MASK  ((unsigned short)0x7FFF)
+
+extern umm_block *umm_heap;
+extern unsigned short int umm_numblocks;
+
+#define UMM_NUMBLOCKS (umm_numblocks)
+
+#define UMM_BLOCK(b)  (umm_heap[b])
+
+#define UMM_NBLOCK(b) (UMM_BLOCK(b).header.used.next)
+#define UMM_PBLOCK(b) (UMM_BLOCK(b).header.used.prev)
+#define UMM_NFREE(b)  (UMM_BLOCK(b).body.free.next)
+#define UMM_PFREE(b)  (UMM_BLOCK(b).body.free.prev)
+#define UMM_DATA(b)   (UMM_BLOCK(b).body.data)
 
 // Note, the block size calculation depends on knowledge of the internals
 // of umm_malloc.c which are not to be exposed to the user of the library
 
 #define UMM_BLOCK_SIZE (8)
 #define UMM_LASTBLOCK ((UMM_MALLOC_CFG_HEAP_SIZE-UMM_BLOCK_SIZE)/UMM_BLOCK_SIZE)
+
+/* -------------------------------------------------------------------------
+ * There are additional files that may be included here - normally it's
+ * not a good idea to include .c files but in this case it keeps the
+ * main umm_malloc file clear and prevents issues with exposing internal
+ * data structures to other programs.
+ * -------------------------------------------------------------------------
+ */
+
+// #include "umm_integrity.c"
+
+extern int umm_integrity_check(void);
+
+#define INTEGRITY_CHECK() umm_integrity_check()
+
+// #include "umm_poison.c"
+
+extern void *umm_poison_malloc( size_t );
+extern void *umm_poison_calloc( size_t, size_t );
+extern void *umm_poison_realloc( void *, size_t );
+extern void umm_poison_free( void * );
+
+extern int umm_poison_check(void);
+
+#define POISON_CHECK() umm_poison_check()
+#define POISON_BYTE (0xa5)
+
+// #include "umm_info.c"
+
+extern void *umm_info( void *, int );
+extern size_t umm_free_heap_size( void );
+
+/* ---------------------------------------------------------------------- */
 
 bool check_all_bytes ( uint8_t * p, size_t s, uint8_t v) {
 	while ( (*p == v) && s ) {

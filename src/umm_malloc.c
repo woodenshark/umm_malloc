@@ -25,12 +25,23 @@
  * ----------------------------------------------------------------------------
  */
  
-#include <stdio.h>
+#include <stddef.h>
 #include <string.h>
 
 #include "umm_malloc.h"
 
 #include "umm_malloc_cfg.h"   /* user-dependent */
+
+/* ------------------------------------------------------------------------- */
+#ifndef UMM_MALLOC_CFG_HEAP_SIZE
+# define UMM_MALLOC_CFG_HEAP_SIZE 0x8000
+#endif
+
+#ifndef UMM_MALLOC_CFG_HEAP_ADDR
+  unsigned char __umm_heap[UMM_MALLOC_CFG_HEAP_SIZE];
+# define UMM_MALLOC_CFG_HEAP_ADDR __umm_heap
+#endif
+/* ------------------------------------------------------------------------- */
 
 /* Use the default DBGLOG_LEVEL and DBGLOG_FUNCTION */
 
@@ -38,7 +49,9 @@
 
 #include "dbglog/dbglog.h"
 
-/* ------------------------------------------------------------------------- */
+/* ------------------------------------------------------------------------ 
+ * TODO: extract this to a private h file so that the test code can use it
+ */
 
 UMM_H_ATTPACKPRE typedef struct umm_ptr_t {
   unsigned short int next;
@@ -47,26 +60,22 @@ UMM_H_ATTPACKPRE typedef struct umm_ptr_t {
 
 
 UMM_H_ATTPACKPRE typedef struct umm_block_t {
-  union {
+  UMM_H_ATTPACKPRE union {
     umm_ptr used;
-  } header;
-  union {
+  } UMM_H_ATTPACKSUF header;
+  UMM_H_ATTPACKPRE union {
     umm_ptr free;
     unsigned char data[4];
-  } body;
+  } UMM_H_ATTPACKSUF body;
 } UMM_H_ATTPACKSUF umm_block;
 
-#define UMM_FREELIST_MASK (0x8000)
-#define UMM_BLOCKNO_MASK  (0x7FFF)
-
-/* ------------------------------------------------------------------------- */
+#define UMM_FREELIST_MASK ((unsigned short)0x8000)
+#define UMM_BLOCKNO_MASK  ((unsigned short)0x7FFF)
 
 umm_block *umm_heap = NULL;
 unsigned short int umm_numblocks = 0;
 
 #define UMM_NUMBLOCKS (umm_numblocks)
-
-/* ------------------------------------------------------------------------ */
 
 #define UMM_BLOCK(b)  (umm_heap[b])
 
@@ -594,15 +603,20 @@ void *umm_realloc( void *ptr, size_t size ) {
     DBGLOG_DEBUG( "realloc %i to a bigger block %i, make new, copy, and free the old\n", blockSize, blocks );
 
     /*
-     * Now umm_malloc() a new one, copy the old data to the new block, and
-     * free up the old block, but only if the malloc was sucessful!
+     * Now umm_malloc() a new one, copy the old data to the new block
+     * only if the malloc was sucessful!
+     *
+     * Previous versions of this library would incorrectly free() the original
+     * block even if a new block could not be allocated. This is no longer 
+     * the case - only free() the memory after the copy has completed!
      */
 
-    if( (ptr = umm_malloc( size )) ) {
-      memcpy( ptr, oldptr, curSize );
-    }
+    ptr = umm_malloc( size );
 
-    umm_free( oldptr );
+    if( ptr ) {
+      memcpy( ptr, oldptr, curSize );
+      umm_free( oldptr );
+    }
   }
 
   /* Release the critical section... */

@@ -36,6 +36,15 @@ the integrity of the data structures.
 
 ## Usage
 
+After cloning the repository from the official source you will need
+to initialize and update the repo to load the required submodules.
+
+```
+git clone https://github.com/rhempel/umm_malloc.git
+git submodule init
+git submodule update
+```
+
 Copy the `umm_malloc_cfg_example.h` file to `umm_malloc_cfg.h` and
 make the changes required to support your application.
 
@@ -69,11 +78,11 @@ the corresponding entries is `umm_malloc_cfg.h`:
 - `UMM_INFO` is used to include code that allows dumping
   the entire heap structure (helpful when there's a problem).
 
-- `UMM_INTEGRITY_CHECK` is used to include code that
+- `UMM_INTEGRITY` is used to include code that
   performs an integrity check on the heap structure. It's
   up to you to call the `umm_integrity_check()` function.
 
-- `UMM_POISON_CHECK` is used to include code that
+- `UMM_POISON` is used to include code that
   adds some bytes around the memory being allocated that
   are filled with known data. If the data is not intact
   when the block is checked, then somone has written outside
