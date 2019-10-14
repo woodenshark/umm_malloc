@@ -36,7 +36,11 @@
 
 #include "umm_malloc.h"
 
-#include "umm_malloc_cfg.h"   /* user-dependent */
+#ifndef UMM_MALLOC_USER_CFG
+  #include "umm_malloc_cfg.h"   /* user-dependent, local */
+#else
+  #include UMM_MALLOC_USER_CFG  /* user-dependent, may be external */
+#endif
 
 /* Use the default DBGLOG_LEVEL and DBGLOG_FUNCTION */
 

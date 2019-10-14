@@ -5,7 +5,11 @@
 #include "unity_fixture.h"
 
 #include "umm_malloc.h"
-#include "umm_malloc_cfg.h"
+#ifndef UMM_MALLOC_USER_CFG
+  #include "umm_malloc_cfg.h"
+#else
+  #include UMM_MALLOC_USER_CFG
+#endif
 
 /* Use the default DBGLOG_LEVEL and DBGLOG_FUNCTION */
 
